@@ -1,3 +1,32 @@
+//! # POW Account
+//!
+//! This library generates leading-zero hashes for password-less authentication and DDoS protection.
+//!
+//! ## Key Features
+//! - Password-less authentication.
+//! - No identity disclosure (no email, phone numbers, etc.).
+//! - Protection from DDoS attacks using proof-of-work.
+//!
+//! ## Example Usage
+//! ```rust
+//! use pow_account::HashFinder;
+//!
+//! fn main() {
+//!     let hash = HashFinder::new(4).find();
+//!     let hash_hex = hex::encode(hash);
+//!
+//!     assert!(hash_hex.starts_with("0000"));
+//!     println!("Generated hash with 4 leading zeros: {}", hash_hex);
+//!
+//!     if let Ok(mathc_result) = HashFinder::new(4).check(hash_hex) {
+//!         println!("Result of match: {}", mathc_result);
+//!     }
+//! }
+//! ```
+//!
+//! ## Additional Information
+//! For more details, refer to the [README](https://github.com/1prefix/pow-account/blob/main/README.md).
+
 use blake2::{Blake2s256, Digest};
 use rand_core::{OsRng, RngCore};
 
@@ -57,7 +86,7 @@ impl Default for HashPrefix {
 impl HashPrefix {
     fn new(leading_zeros: u8) -> Self {
         HashPrefix {
-            zero_bits: 4 * leading_zeros,
+            zero_bits: 8 / 2 * leading_zeros,
         }
     }
 }
@@ -85,6 +114,9 @@ impl HashPrefix {
     }
 }
 
+/// `HashFinder` is a Structure for finding cryptographic hashes that meet a specified difficulty target, defined by a number of leading zeros.
+/// The core idea is to search for a hash that is lower than a computed target value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HashFinder {
     target: [u8; 32],
 }
@@ -114,15 +146,28 @@ impl HashFinder {
         }
     }
 
-    /// Returns a hash with five leading zeros
+    /// Generates a hash with a specific number of leading zeros.
+    ///
+    /// This function attempts to find a cryptographic hash with a number of leading
+    /// zeros specified by the `leading_zeros` argument.
+    ///
+    /// # Parameters
+    ///
+    /// - `leading_zeros`: The number of leading zeros to generate in the hash.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a 32-byte array containing the generated hash.
+    ///
     /// # Example
-    /// ```
+    ///
+    /// ```rust
     /// use pow_account::HashFinder;
     ///
-    /// let hash = HashFinder::default().find();
+    /// let hash_finder = HashFinder::new(4);
+    /// let hash = hash_finder.find();
     /// let hash_hex = hex::encode(hash);
-    ///
-    /// assert!(hash_hex.starts_with("00000"));
+    /// assert!(hash_hex.starts_with("0000"));
     /// ```
     pub fn find(&self) -> [u8; 32] {
         loop {
@@ -134,7 +179,26 @@ impl HashFinder {
         }
     }
 
-    /// Checks if the hash has a proper number of leading zeros
+    /// Verifies whether a given hash meets the required number of leading zeros.
+    ///
+    /// This function takes a hexadecimal string representing a hash and checks if
+    /// it satisfies the leading zero requirement specified by the `leading_zeros` value.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: A string containing the hexadecimal representation of the hash to check.
+    ///
+    /// # Returns
+    ///
+    /// This function returns `Ok(true)` if the hash meets the requirement, otherwise
+    /// it returns `Ok(false)`. If the input string is not a valid hexadecimal representation,
+    /// it returns an `Err` with a description of the error.
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if the provided hash string is not a valid
+    /// hexadecimal representation.
+    ///
     /// # Examples
     /// ```
     /// use pow_account::HashFinder;
