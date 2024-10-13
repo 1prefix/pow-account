@@ -1,7 +1,24 @@
 [package]
+authors = ["Amir Boziev <amrbz@proton.me>"]
 name = "pow_account"
 version = "0.1.0"
 edition = "2021"
+description = ""
+license = "MIT"
+repository = "https://github.com/1prefix/pow-account"
+keywords = [
+    "authentication",
+    "proof-of-work",
+    "pow",
+    "ddos",
+    "password-less",
+    "client",
+    "open-sourse",
+    "leading zeros",
+]
+readme = "README.md"
+license-file = "LICENSE"
+categories = ["authentication", "command-line-utilities"]
 
 [dependencies]
 blake2 = "0.10.6"
