@@ -17,7 +17,7 @@ keywords = [
     "leading zeros",
 ]
 readme = "README.md"
-license-file = "LICENSE"
+license-file = "LICENSE.txt"
 categories = ["authentication", "command-line-utilities"]
 
 [dependencies]
