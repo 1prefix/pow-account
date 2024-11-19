@@ -1,25 +1,19 @@
 //! # POW Account
 //!
-//! This library generates leading-zero hashes for password-less authentication and DDoS protection.
+//! This library generates a cryptographic hash and performs a second round of hashing to produce a hash with a configurable number of leading zeros.
+//! It is designed for applications requiring proof-of-work-like functionality or hash-based validation with adjustable difficulty.
 //!
-//! ## Key Features
-//! - Password-less authentication.
-//! - No identity disclosure (no email, phone numbers, etc.).
-//! - Protection from DDoS attacks using proof-of-work.
 //!
 //! ## Example Usage
 //! ```rust
 //! use pow_account::HashFinder;
 //!
 //! fn main() {
-//!     let hash = HashFinder::new(4).find();
-//!     let hash_hex = hex::encode(hash);
+//!     let origin_hash = HashFinder::new(4).find();
+//!     let origin_hash_hex = hex::encode(origin_hash);
 //!
-//!     assert!(hash_hex.starts_with("0000"));
-//!     println!("Generated hash with 4 leading zeros: {}", hash_hex);
-//!
-//!     if let Ok(mathc_result) = HashFinder::new(4).check(hash_hex) {
-//!         println!("Result of match: {}", mathc_result);
+//!     if let Ok(target_hash_match_result) = HashFinder::new(4).check(origin_hash_hex) {
+//!         println!("Result of match: {}", target_hash_match_result);
 //!     }
 //! }
 //! ```
@@ -29,32 +23,6 @@
 
 use blake2::{Blake2s256, Digest};
 use rand_core::{OsRng, RngCore};
-
-struct Hasher {
-    hash: [u8; 32],
-}
-
-impl Hasher {
-    fn new() -> Self {
-        Hasher { hash: [0u8; 32] }
-    }
-
-    fn get(self) -> [u8; 32] {
-        self.hash
-    }
-
-    fn fill(mut self) -> Self {
-        self.hash = self.new_hash();
-        self
-    }
-
-    fn new_hash(&self) -> [u8; 32] {
-        let mut hash = Blake2s256::new();
-        let entropy = Entropy::new().get();
-        let _ = hash.update(entropy);
-        hash.finalize().into()
-    }
-}
 
 struct Entropy {
     entropy: [u8; 32],
@@ -68,8 +36,14 @@ impl Entropy {
         Entropy { entropy }
     }
 
-    fn get(self) -> [u8; 32] {
-        self.entropy
+    fn from(entropy: [u8; 32]) -> Self {
+        Entropy { entropy }
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        let mut hash = Blake2s256::new();
+        let _ = hash.update(self.entropy);
+        hash.finalize().into()
     }
 }
 
@@ -130,15 +104,13 @@ impl Default for HashFinder {
 }
 
 impl HashFinder {
-    /// Returns a hash with a custom number of leading zeros
+    /// Returns a HashFinder struct with a specified number of target leading zeros
     /// # Example
     /// ```
     /// use pow_account::HashFinder;
     ///
-    /// let hash = HashFinder::new(4).find();
-    /// let hash_hex = hex::encode(hash);
+    /// let hash_finder = HashFinder::new(4);
     ///
-    /// assert!(hash_hex.starts_with("0000"));
     /// ```
     pub fn new(leading_zeros: u8) -> Self {
         HashFinder {
@@ -146,10 +118,9 @@ impl HashFinder {
         }
     }
 
-    /// Generates a hash with a specific number of leading zeros.
+    /// Finds an origin hash
     ///
-    /// This function attempts to find a cryptographic hash with a number of leading
-    /// zeros specified by the `leading_zeros` argument.
+    /// This function attempts to find a cryptographic hash that is an origin for a target hash that has a specific number of leading zeroes
     ///
     /// # Parameters
     ///
@@ -163,26 +134,33 @@ impl HashFinder {
     ///
     /// ```rust
     /// use pow_account::HashFinder;
+    /// use blake2::{Blake2s256, Digest};
     ///
-    /// let hash_finder = HashFinder::new(4);
-    /// let hash = hash_finder.find();
-    /// let hash_hex = hex::encode(hash);
-    /// assert!(hash_hex.starts_with("0000"));
+    /// let origin_hash = HashFinder::new(4).find();
+    ///
+    /// let mut hasher = Blake2s256::new();
+    /// hasher.update(&origin_hash);
+    /// let target_hash: [u8; 32] = hasher.finalize().into();
+    ///
+    /// let target_hash_hex = hex::encode(target_hash);
+    ///
+    /// assert!(target_hash_hex.starts_with("0000"));
     /// ```
     pub fn find(&self) -> [u8; 32] {
         loop {
-            let hash = Hasher::new().fill().get();
-            match hash < self.target {
-                true => return hash,
+            let origin_hash = Entropy::new().hash();
+            let target_hash = Entropy::from(origin_hash).hash();
+            match target_hash < self.target {
+                true => return origin_hash,
                 false => continue,
             }
         }
     }
 
-    /// Verifies whether a given hash meets the required number of leading zeros.
+    /// Determines whether a given hash serves as the origin for a target hash that satisfies a specified number of leading zeros.
     ///
-    /// This function takes a hexadecimal string representing a hash and checks if
-    /// it satisfies the leading zero requirement specified by the `leading_zeros` value.
+    /// This function takes a hexadecimal string representing an origin hash and checks if
+    /// its hash satisfies the leading zero requirement specified by the `leading_zeros` value.
     ///
     /// # Parameters
     ///
@@ -203,60 +181,72 @@ impl HashFinder {
     /// ```
     /// use pow_account::HashFinder;
     ///
-    /// let hash = String::from("000129a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678");
-    /// let result = HashFinder::new(3).check(hash);
+    /// let origin_hash = HashFinder::new(4).find();
+    /// let origin_hash_hex = hex::encode(origin_hash);
+    /// let result = HashFinder::new(3).check(origin_hash_hex);
     /// assert!(result.unwrap());
     ///
-    /// let hash = String::from("000009a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678");
-    /// let result = HashFinder::default().check(hash);
+    /// let origin_hash = String::from("3ca727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d4");
+    /// let result = HashFinder::new(3).check(origin_hash);
+    /// assert!(result.unwrap());
+    ///
+    /// let origin_hash = String::from("51ad0600f06b0d57300a37952cea658410488748400628c8a2e7d712892d806e");
+    /// let result = HashFinder::default().check(origin_hash);
     /// assert!(result.unwrap());
     /// ```
-    pub fn check(&self, hash: String) -> Result<bool, hex::FromHexError> {
-        let mut buffer: [u8; 32] = [0u8; 32];
-        let _ = hex::decode_to_slice(hash, &mut buffer)?;
+    pub fn check(&self, origin_hash: String) -> Result<bool, hex::FromHexError> {
+        let mut origin_hash_bytes: [u8; 32] = [0u8; 32];
+        let _ = hex::decode_to_slice(origin_hash, &mut origin_hash_bytes)?;
 
-        Ok(buffer < self.target)
+        let target_hash_bytes = Entropy::from(origin_hash_bytes).hash();
+
+        Ok(target_hash_bytes < self.target)
     }
 }
 
 #[cfg(test)]
 mod pow_account {
 
-    use hex::FromHexError;
-
     use super::*;
-
-    #[test]
-    fn new_hash_has_a_length_of_32_bytes() {
-        let hasher = Hasher::new();
-        assert!(hasher.get().len().eq(&32))
-    }
-
-    #[test]
-    fn fills_the_empty_hash() {
-        let hasher = Hasher::new().fill();
-        assert!(hasher.get().len() > 0)
-    }
-
-    #[test]
-    fn generated_hashes_are_unique() {
-        let hasher_a = Hasher::new().fill();
-        let hasher_b = Hasher::new().fill();
-
-        assert_ne!(hasher_a.get(), hasher_b.get())
-    }
+    use hex::FromHexError;
 
     #[test]
     fn new_entropy_has_a_length_of_32() {
-        let entropy = Entropy::new().get();
+        let entropy = Entropy::new().entropy;
         assert!(entropy.len().eq(&32))
     }
 
     #[test]
     fn new_entropy_is_unique() {
-        let entropy_a = Entropy::new().get();
-        let entropy_b = Entropy::new().get();
+        let entropy_a = Entropy::new().entropy;
+        let entropy_b = Entropy::new().entropy;
         assert_ne!(entropy_a, entropy_b)
+    }
+
+    #[test]
+    fn entropy_generates_256bit_hash() {
+        let hash = Entropy::new().hash();
+        assert!(hash.len().eq(&32))
+    }
+
+    #[test]
+    fn entropy_created_from_a_set_of_bytes() {
+        let entropy_a = Entropy::new().entropy;
+        let entropy_b = Entropy::from(entropy_a);
+        assert_eq!(entropy_b.entropy, entropy_a)
+    }
+
+    #[test]
+    fn blake2s_hash_can_be_validated() {
+        let origin_hash = "c37289b48949a7d172346cb3e5600da905f53e7c022d364836dcf57db4de33fa";
+        let target_hash = "7478987293e1864fd833ae3607bc99b9b22e7ca39bced21c3b0428bd9c7218ba";
+
+        let origin_hash_vec = hex::decode(origin_hash).unwrap();
+        let origin_hash_bytes: [u8; 32] = origin_hash_vec.try_into().unwrap();
+
+        let entropy = Entropy::from(origin_hash_bytes);
+        let origin_hash_hex = hex::encode(entropy.hash()).to_string();
+        assert_eq!(origin_hash_hex, target_hash)
     }
 
     #[test]
@@ -279,30 +269,40 @@ mod pow_account {
 
     #[test]
     fn can_find_a_hash_which_starts_from_a_specific_pattern() {
-        let hash = HashFinder::new(4).find();
-        let hash_hex = hex::encode(hash);
+        let origin_hash = HashFinder::new(4).find();
+        let target_hash = Entropy::from(origin_hash).hash();
 
+        let hash_hex = hex::encode(target_hash);
         assert!(hash_hex.starts_with("0000"))
     }
 
     #[test]
     fn checks_the_hash_for_the_required_number_of_leading_zeros() {
-        let hash = String::from("000009a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678");
+        let hash = String::from("3ca727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d4");
+        assert!(HashFinder::new(3).check(hash).unwrap());
+
+        let hash = String::from("73b8f38be026335eb78946ea30434ff3cee4cff6544d49b4772f80397d40e72f");
         assert!(HashFinder::new(4).check(hash).unwrap());
 
-        let hash = String::from("002129a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678");
+        let hash = String::from("51ad0600f06b0d57300a37952cea658410488748400628c8a2e7d712892d806e");
+        assert!(HashFinder::new(5).check(hash).unwrap());
+
+        let hash = String::from("51ad0600f06b0d57300a37952cea658410488748400628c8a2e7d712892d806e");
+        assert!(HashFinder::default().check(hash).unwrap());
+
+        let hash = String::from("3ca727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d4");
         assert_eq!(HashFinder::new(4).check(hash).unwrap(), false);
 
-        let hash = String::from("00+129a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678");
+        let hash = String::from("3c+727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d4");
         let err = HashFinder::new(4).check(hash).unwrap_err();
         assert_eq!(err, FromHexError::InvalidHexCharacter { c: '+', index: 2 });
 
-        let hash = String::from("002129a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe67");
+        let hash = String::from("3ca727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d");
         let err = HashFinder::new(4).check(hash).unwrap_err();
         assert_eq!(err, FromHexError::OddLength);
 
         let hash =
-            String::from("002129a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe672fe67");
+            String::from("3ca727c7fefed674268797882ff4b26c8e28873ee6fbfae71d9ccc35e24444d444d4");
         let err = HashFinder::new(4).check(hash).unwrap_err();
         assert_eq!(err, FromHexError::InvalidStringLength)
     }

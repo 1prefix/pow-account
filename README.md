@@ -1,11 +1,7 @@
 # POW Account
 
-This library introduces a password-less authentication mechanism for open-source applications, utilizing a proof-of-work approach to enhance security and mitigate DDoS attacks. By requiring clients to generate cryptographic hashes with a specified number of leading zeros, this method not only eliminates the need for traditional authentication (e.g., usernames and passwords) but also provides a robust defense against malicious requests.
-
-## Key features
-- **Password-less authentication**. Users do not need to create and use a password;
-- **No identity disclosing**.  Users authenticate without the need for credentials such as emails, or phone numbers;
-- **Protection from DDoS attack**. The library implements a proof-of-work (PoW) model where clients must perform computationally intensive tasks (generating hashes) before sending a request. This makes it expensive for attackers to flood the server with requests, effectively mitigating Distributed Denial of Service (DDoS) attacks;
+This library generates a cryptographic hash and performs a second round of hashing to produce a hash with a configurable number of leading zeros.
+It is designed for applications requiring proof-of-work-like functionality or hash-based validation with adjustable difficulty.
 
 ## The algorithm of work
 The sequence diagram below shows the high-level algorithm of client-server interaction.
@@ -16,34 +12,26 @@ sequenceDiagram
     participant c as Client
     participant s as Server
 
-    c ->> c: Generate a hash with N leading zeros
-    c ->> s: Send a request to get an auth token
-
+    c ->> c: Generate an origin hash for a target hash with N leading zeros
+    c ->> s: Send a request
+    s ->> s: Calculates the target hash
 
     break Insufficient number of Leading Zeros
         s ->> c: Return an error
     end
 
-    s ->> s: Saves the timestamp of the request
-
-    break Too many requests
-        s ->> c: Return an error
-    end
-
-    s ->> c: Auth Token
+    s ->> c: Send a response
 ```
 
-*Step 1*. A Client generates a Hash that starts with a particular number of zeros. The required number of zeros is defined by the Server. This Hash represents a User ID. This operation is done once and the Hash can be reused for future requests.
+*Step 1*. A Client generates an origin hash for a target hash that starts with a particular number of zeros. The required number of zeros is defined by the Server.
 
-*Step 2*. A Client sends the request to get an Auth Token (JWT).
+*Step 2*. A Client sends the request to the Server (for instance, to get an Auth Token).
 
-*Step 3*. A Server checks if the sent hash starts with the proper number of leading zeros. If the number is wrong returns an error.
+*Step 3*. A Server calculates the target hash and checks if the target hash starts with the proper number of leading zeros.
 
-*Step 3*. A Server saves the timestamp of the last request for a particular Hash.
+*Step 4*. If the number is wrong returns an error.
 
-*Step 5*. A Server checks if the last request was made too soon.
-
-*Step 6*. A Server returns the Auth Token.
+*Step 5*. A Server returns a response.
 
 
 
@@ -53,11 +41,19 @@ To install the library from your app folder run:
 cargo add pow_account
 ```
 
+Add required dependencies
+```
+cargo add blake2
+cargo add hex
+```
+
 Or clone the repository to your app folder and add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-pow_account = { path = "pow_account" }
+pow_account = { path = "../path/to/pow_account" }
+blake2 = "0.10.6"
+hex = "0.4.3"
 ```
 
 ## Usage
@@ -69,55 +65,81 @@ Here's a brief overview of how to use the library:
 use pow_account::HashFinder;
 ```
 
-### Generating a Hash with Default number of Leading Zeros
-If you want to generate a hash with the default number of leading zeros (which is 20 bits or 5 leading zeros), you can do so like this:
-```rust
-let hash = HashFinder::default().find();
-let hash_hex = hex::encode(hash);
-println!("Generated hash: {}", hash_hex);
-```
-
-### Generating a Hash with Custom number of Leading Zeros
-You can create a new `HashFinder` instance with a specified number of leading zeros and generate a hash as follows:
-```rust
-let hash = HashFinder::new(4).find();
-let hash_hex = hex::encode(hash);
-println!("Generated hash: {}", hash_hex);
-```
-This will generate a hash that starts with 4 leading zeros.
-
-### Check that the Hash starts with a required number of Leading Zeros
-You can check the number of leading zeros for a hash as following:
-```rust
-let hash = "000009a152773d97be21a10987653c1ac45dd774f0a7814584a0c13baf2fe678";
-
-// Default number of leading zeros
-if let Ok(mathc_result) = HashFinder::default().check(hash) {
-    ...
-}
-
-// Custom number of leading zeros
-if let Ok(mathc_result) = HashFinder::new(4).check(hash) {
-    ...
-}
-
-```
-This will generate a hash that starts with 4 leading zeros.
-
-## Example
-Here’s a complete example demonstrating how to generate a hash with a specific pattern:
+### Generating an Origin Hash for a Target Hash with a default number of Leading Zeros
+If you want to generate an origin hash for a target hash with the default number of leading zeros (which is 20 bits or 5 leading zeros), you can do so like this:
 ```rust
 use pow_account::HashFinder;
 
+let origin_hash = HashFinder::default().find();
+let origin_hash_hex = hex::encode(origin_hash);
+println!("Generated origin hash: {}", origin_hash_hex);
+```
+
+### Generating an Origin Hash for a Target Hash with a specified number of Leading Zeros
+You can create a new `HashFinder` instance with a specified number of leading zeros and generate an origin hash as follows:
+```rust
+use pow_account::HashFinder;
+
+let origin_hash = HashFinder::new(4).find();
+let origin_hash_hex = hex::encode(origin_hash);
+println!("Generated origin hash: {}", origin_hash_hex);
+```
+This will generate an origin hash for a Target Hash that starts with 4 leading zeros.
+
+### Checking that the Target Hash starts with a required number of Leading Zeros
+You can check the number of leading zeros for a hash as following:
+```rust
+use pow_account::HashFinder;
+
+let origin_hash = HashFinder::default().find();
+let origin_hash_hex = hex::encode(origin_hash);
+
+// Default number of leading zeros
+if let Ok(match_result) = HashFinder::default().check(origin_hash_hex) {
+    ...
+}
+
+let origin_hash = HashFinder::new(4).find();
+let origin_hash_hex = hex::encode(origin_hash);
+
+// Custom number of leading zeros
+if let Ok(match_result) = HashFinder::new(4).check(origin_hash_hex) {
+    ...
+}
+
+```
+This will generate an origin hash for a target hash that starts with 4 leading zeros.
+
+## Example
+Here’s a complete example demonstrating how to generate an origin hash and validate it:
+```rust
+use blake2::{Blake2s256, Digest};
+use pow_account::HashFinder;
+
 fn main() {
-    let hash = HashFinder::new(4).find();
-    let hash_hex = hex::encode(hash);
+    // 1. Generating the origin hash (client side)
+    let origin_hash = HashFinder::new(4).find();
 
-    assert!(hash_hex.starts_with("0000"));
-    println!("Generated hash with 4 leading zeros: {}", hash_hex);
+    // This origin_hash_hex String is the one to be sent to the Server
+    let origin_hash_hex = hex::encode(origin_hash); 
 
-    if let Ok(mathc_result) = HashFinder::new(4).check(hash_hex) {
-        println!("Result of match: {}", mathc_result);
+    // 2. Calculating the target hash (server side)
+    let mut hasher = Blake2s256::new();
+    hasher.update(&origin_hash);
+    let target_hash: [u8; 32] = hasher.finalize().into();
+
+    // This is the target hash that should be started with a specified number of leading zeros
+    let target_hash_hex = hex::encode(target_hash);
+
+    assert!(target_hash_hex.starts_with("0000"));
+    println!("Generated hash with 4 leading zeros: {}", target_hash_hex);
+
+    // Check that the target hash starts with 4 zeros
+    if let Ok(match_result) = HashFinder::new(4).check(origin_hash_hex) {
+        // Correct target hash
+        println!("Result of match: {}", match_result);
+    } else {
+        // Error handler
     }
 }
 ```

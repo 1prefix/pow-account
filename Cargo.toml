@@ -1,12 +1,12 @@
 [package]
 authors = ["Amir Boziev <amrbz@proton.me>"]
 name = "pow_account"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
-description = "Generation of hashes with leading zeros for password-less authentication and DDoS protection"
+description = "This library generates cryptographic hashes with a second round of hashing to produce configurable leading zeros for proof-of-work or validation"
 license = "MIT"
 repository = "https://github.com/1prefix/pow-account"
-keywords = ["authentication", "hash", "leading-zeros", "ddos", "proof-of-work"]
+keywords = ["authentication", "hash", "leading-zeros", "proof-of-work"]
 readme = "README.md"
 license-file = "LICENSE"
 categories = ["authentication", "command-line-utilities"]
