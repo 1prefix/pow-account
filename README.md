@@ -14,13 +14,13 @@ sequenceDiagram
 
     c ->> c: Generate an origin hash for a target hash with N leading zeros
     c ->> s: Send a request
-    s ->> s: Calculates the target hash
+    s ->> s: Calculates the target hash and checks the number of leading zeros
 
-    break Insufficient number of Leading Zeros
-        s ->> c: Return an error
+    alt Correct Target Hash
+      s ->> c: Return a response
+    else Insufficient number of Leading Zeros
+      s ->> c: Return an error
     end
-
-    s ->> c: Send a response
 ```
 
 *Step 1*. A Client generates an origin hash for a target hash that starts with a particular number of zeros. The required number of zeros is defined by the Server.
@@ -29,10 +29,7 @@ sequenceDiagram
 
 *Step 3*. A Server calculates the target hash and checks if the target hash starts with the proper number of leading zeros.
 
-*Step 4*. If the number is wrong returns an error.
-
-*Step 5*. A Server returns a response.
-
+*Step 4*. A Server returns a successful response if the number of leading zeros is correct, otherwise returns an error.
 
 
 ## Installation
@@ -121,7 +118,7 @@ fn main() {
     let origin_hash = HashFinder::new(4).find();
 
     // This origin_hash_hex String is the one to be sent to the Server
-    let origin_hash_hex = hex::encode(origin_hash); 
+    let origin_hash_hex = hex::encode(origin_hash);
 
     // 2. Calculating the target hash (server side)
     let mut hasher = Blake2s256::new();
@@ -134,12 +131,19 @@ fn main() {
     assert!(target_hash_hex.starts_with("0000"));
     println!("Generated hash with 4 leading zeros: {}", target_hash_hex);
 
-    // Check that the target hash starts with 4 zeros
+    // 3. Calculate the taget hash and check that it starts with 4 zeros
     if let Ok(match_result) = HashFinder::new(4).check(origin_hash_hex) {
-        // Correct target hash
         println!("Result of match: {}", match_result);
-    } else {
-        // Error handler
+
+        // 4. Process the result of the match
+        match match_result {
+            true => {
+                // Correct Target Hash
+            }
+            false => {
+                // Insufficient number of Leading Zeros
+            }
+        }
     }
 }
 ```
